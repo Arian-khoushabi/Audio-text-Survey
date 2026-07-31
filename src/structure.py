@@ -1,35 +1,77 @@
 import json
 from pathlib import Path
 
+
 ROOT_DIR = Path(__file__).parent.parent / "data"
 
-AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
+AUDIO_EXTENSIONS = {
+    ".wav",
+    ".mp3",
+    ".flac",
+    ".m4a",
+    ".ogg"
+}
 
-for question_folder in sorted(ROOT_DIR.iterdir()):
+questions = []
+
+for question_number, question_folder in enumerate(
+    sorted(ROOT_DIR.iterdir()),
+    start=1
+):
 
     if not question_folder.is_dir():
         continue
 
-    metadata = []
+    answers = []
 
-    for audio_file in sorted(question_folder.iterdir()):
+    for answer_number, audio_file in enumerate(
+        sorted(question_folder.iterdir()),
+        start=1
+    ):
+
+        if not audio_file.is_file():
+            continue
 
         if audio_file.suffix.lower() not in AUDIO_EXTENSIONS:
             continue
 
-        metadata.append({
-            "question": question_folder.name,
-            "answer": audio_file.name,
-            "audio_path": str(audio_file.relative_to(ROOT_DIR)),
+        answers.append({
+            "answer_id": f"q{question_number}_a{answer_number}",
+            "audio_path": str(
+                audio_file.relative_to(ROOT_DIR)
+            ),
             "transcript": "",
             "emotion": None,
-            "summary": None,
             "status": "pending"
         })
 
-    metadata_file = question_folder / "metadata.json"
+    questions.append({
+        "question_id": f"q{question_number}",
+        "question_text": question_folder.name,
+        "answers": answers,
+        "summary": None
+    })
 
-    with open(metadata_file, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=4, ensure_ascii=False)
+metadata = {
+    "questions": questions
+}
 
-print("Metadata files created successfully.")
+metadata_file = ROOT_DIR / "metadata.json"
+
+with open(
+    metadata_file,
+    "w",
+    encoding="utf-8"
+) as file:
+
+    json.dump(
+        metadata,
+        file,
+        indent=4,
+        ensure_ascii=False
+    )
+
+
+print(
+    f"Metadata file created successfully:\n{metadata_file}"
+)
