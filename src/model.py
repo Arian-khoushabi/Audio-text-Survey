@@ -1,6 +1,7 @@
 from langchain_cohere import ChatCohere
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import FewShotChatMessagePromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.documents import Document
 from collections import defaultdict
 import getpass
@@ -55,71 +56,120 @@ model = ChatCohere(
     cohere_api_key=os.environ["COHERE_API_KEY"],
 )
 
-system_prompt = "You are a Persian survey analysis assistant" \
-"You will receive metadata containing multiple user answers to the same question. Each answer may contain:" \
-"- question_id" \
-"- transcript" \
-"- emotion probabilities" \
-"Analyze all answers together and produce ONE overall summary for the question." \
-"Requirements:" \
-"- Summarize the overall opinions, experiences, positive/negative aspects, problems, suggestions, and recurring themes." \
-"- Identify important differences or conflicting opinions when present." \
-"- Use emotion probabilities only as supporting context for interpreting the transcriptions." \
-"- Do not report emotion probabilities, emotion labels, or emotion scores as separate output unless they are directly relevant to the overall summary." \
-"- Never invent information or assume something that is not supported by the answers." \
-"- Do not summarize answers individually; combine them into one coherent overall summary." \
-"- The summary must be accurate, precise, concise, and natural Persian." \
-"- Generate meaningful keywords representing the main topics and recurring themes." \
-"- Do not use generic or unsupported keywords." \
-"Return ONLY a valid JSON object with exactly this structure:" \
-"{" \
-'  "summary": "خلاصه کلی پاسخ کاربران",' \
-'  "keywords": ["کلیدواژه۱", "کلیدواژه۲", "کلیدواژه۳"]' \
-"}" \
-"Do not output Markdown, explanations, or anything outside the JSON object."
+system_prompt = """
+You are a careful Persian survey analysis assistant.
+
+You will receive multiple answers given by users to the same survey question.
+Each answer contains:
+- an answer_id
+- a transcript
+- emotion probabilities
+
+Your task is to analyze ALL answers together and produce ONE overall
+summary of the responses.
+
+IMPORTANT PRINCIPLES:
+
+1. Base the analysis primarily on the transcripts.
+   The transcript is the primary source of information.
+
+2. Use emotion probabilities only as supporting information.
+   Do not treat an emotion probability as evidence of a user's opinion,
+    preference, intention, or evaluation.
+    If the transcripts themselves do not explicitly express an emotion or opinion,
+    do not claim that they do.
+    When relevant, you may mention that the emotional tone varies across answers,
+    but do not infer the cause or meaning of that variation.
+
+3. Do not invent information.
+   Do not infer opinions, intentions, causes, preferences, or meanings that are
+   not supported by the transcripts.
+
+4. Do not assume that an emotion means a specific opinion.
+   For example, anger does not necessarily mean that the user disliked the
+   subject mentioned in the transcript.
+
+5. Do not infer emotion from punctuation, capitalization, wording, or symbols.
+   Use only the provided emotion probabilities when discussing emotional tone.
+
+6. Distinguish between:
+   - what users explicitly said,
+   - recurring patterns in the answers,
+   - differences or contradictions between answers.
+
+7. If the answers are descriptive rather than opinion-based, say so.
+   Do not force the analysis into opinions, positive/negative aspects,
+   problems, or suggestions when these are not present.
+
+8. Do not summarize each answer separately.
+   Combine the answers into one coherent overall summary.
+
+9. When a pattern appears frequently, mention it as a recurring pattern.
+   Do not claim exact proportions or percentages unless they can be reliably
+   determined from the provided answers.
+
+10. Do not make claims about which group is larger unless the provided answers
+    clearly support that conclusion.
+
+11. Keep the summary concise, factual, and natural Persian.
+
+12. Generate a small number of meaningful keywords.
+    Keywords must be directly supported by the transcripts and represent the
+    main recurring topics or themes.
+    Avoid generic keywords such as "پاسخ کاربران", "احساسات", or "نظرات"
+    unless they are genuinely meaningful in the context.
+
+OUTPUT:
+
+Return a JSON object containing exactly two fields:
+
+- "summary": a concise overall summary in natural Persian
+- "keywords": a list of meaningful Persian keywords
+
+Do not include explanations outside the JSON object.
+"""
 
 examples = [
     {
-        "input": {
-            "question_id": "q1",
-            "answers": [
-                {
-                    "transcript": "I really liked the system.",
-                    "emotion": {
-                        "neu": 0.10,
-                        "hap": 0.85,
-                        "ang": 0.02,
-                        "sad": 0.03
+        "input": json.dumps(
+            {
+                "question_id": "q_example",
+                "answers": [
+                    {
+                        "transcript": "بچه‌ها کنار در صحبت می‌کنند.",
+                        "emotion": {
+                            "neu": 0.70,
+                            "hap": 0.20,
+                            "ang": 0.05,
+                            "sad": 0.05
+                        }
+                    },
+                    {
+                        "transcript": "سگ‌ها کنار در نشسته‌اند.",
+                        "emotion": {
+                            "neu": 0.80,
+                            "hap": 0.10,
+                            "ang": 0.05,
+                            "sad": 0.05
+                        }
                     }
-                },
-                {
-                    "transcript": "It was very easy to use.",
-                    "emotion": {
-                        "neu": 0.20,
-                        "hap": 0.75,
-                        "ang": 0.03,
-                        "sad": 0.02
-                    }
-                },
-                {
-                    "transcript": "I had some problems with it.",
-                    "emotion": {
-                        "neu": 0.40,
-                        "hap": 0.10,
-                        "ang": 0.35,
-                        "sad": 0.15
-                    }
-                }
-            ]
-        },
-        "output": {
-            "summary": "بازخورد کاربران در مجموع مثبت است. کاربران سیستم را دوست‌داشتنی و آسان برای استفاده توصیف کرده‌اند، هرچند یکی از کاربران به وجود برخی مشکلات در استفاده از سیستم اشاره کرده است. احساسات شناسایی‌شده نیز عمدتاً با بازخورد مثبت کاربران همخوانی دارند.",
-            "keywords": [
-                "رضایت کاربران",
-                "سهولت استفاده",
-                "مشکلات سیستم"
-            ]
-        }
+                ]
+            },
+            ensure_ascii=False,
+            indent=2
+        ),
+        "output": json.dumps(
+            {
+                "summary": "پاسخ‌ها عمدتاً دو صحنه را توصیف می‌کنند: بچه‌ها در حال صحبت در کنار در و سگ‌ها در حال نشستن در کنار در. پاسخ‌ها بیشتر توصیفی هستند و نظر یا ارزیابی صریحی ارائه نمی‌کنند.",
+                "keywords": [
+                    "بچه‌ها",
+                    "سگ‌ها",
+                    "کنار در"
+                ]
+            },
+            ensure_ascii=False,
+            indent=2
+        )
     }
 ]
 example_prompt = ChatPromptTemplate.from_messages(
@@ -132,6 +182,8 @@ few_shot_prompt = FewShotChatMessagePromptTemplate(
     example_prompt=example_prompt, 
     examples=examples,
 )
+
+parser = JsonOutputParser()
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -147,16 +199,22 @@ Question ID:
 
 Answers:
 {answers}
+
+{format_instructions}
 """
         ),
     ]
 )
 
-chain = prompt | model
+chain = prompt | model | parser
 
 for question in metadata["questions"]:
 
     question_id = question["question_id"]
+
+    if question.get("summary") and question.get("keywords"):
+        print(f"Skipping {question_id}: already processed.")
+        continue
 
     question_documents = documents_by_question.get(
         question_id,
@@ -192,33 +250,62 @@ for question in metadata["questions"]:
     print(f"Processing {question_id}")
     print(f"Number of answers: {len(answers)}")
 
-    response = chain.invoke(
-        {
-            "question_id": question_id,
-            "answers": answers_json,
-        }
-    )
+    max_retries = 2
 
-    try:
+    for attempt in range(1, max_retries + 1):
 
-        result = json.loads(response.content)
+        try:
 
-        summary = result["summary"]
-        keywords = result["keywords"]
+            response = chain.invoke(
+                {
+                    "question_id": question_id,
+                    "answers": answers_json,
+                    "format_instructions": parser.get_format_instructions(),
+                }
+            )
 
-    except (json.JSONDecodeError, KeyError) as error:
+            summary = response.get("summary")
+            keywords = response.get("keywords")
 
-        print(
-            f"Error parsing response for {question_id}: {error}"
-        )
+            if not isinstance(summary, str) or not isinstance(keywords, list):
+                raise ValueError("Invalid format received from model.")
 
-        print("Raw response:")
-        print(response.content)
+        except Exception as error:
 
+            print(
+                f"Attempt {attempt}/{max_retries} failed "
+                f"for {question_id}: {error}"
+            )
+
+            if attempt == max_retries:
+
+                print(
+                    f"Failed to process {question_id} "
+                    f"after {max_retries} attempts."
+                )
+
+                summary = None
+                keywords = None
+
+
+    if summary is None or keywords is None:
         continue
 
     question["summary"] = summary
     question["keywords"] = keywords
+
+    with open(
+        METADATA_FILE,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            metadata,
+            file,
+            indent=4,
+            ensure_ascii=False
+        )
 
     print("\nSummary:")
     print(summary)
@@ -226,20 +313,4 @@ for question in metadata["questions"]:
     print("\nKeywords:")
     print(keywords)
 
-with open(
-    METADATA_FILE,
-    "w",
-    encoding="utf-8"
-) as file:
-
-    json.dump(
-        metadata,
-        file,
-        indent=4,
-        ensure_ascii=False
-    )
-
-
-print("\n" + "=" * 70)
-print("All questions processed successfully.")
-print(f"Updated metadata saved to: {METADATA_FILE}")
+    print(f"\n{question_id} saved successfully.")
