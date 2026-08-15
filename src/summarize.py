@@ -1,13 +1,14 @@
 from langchain_cohere import ChatCohere
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.prompts import FewShotChatMessagePromptTemplate
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    FewShotChatMessagePromptTemplate,
+)
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.documents import Document
-from collections import defaultdict
 import getpass
+import json
 import os
 from pathlib import Path
-import json
+
 
 ROOT_DIR = Path(__file__).parent.parent / "data"
 METADATA_FILE = ROOT_DIR / "metadata.json"
@@ -15,41 +16,10 @@ METADATA_FILE = ROOT_DIR / "metadata.json"
 with open(METADATA_FILE, "r", encoding="utf-8") as file:
     metadata = json.load(file)
 
-documents = []
+os.environ["COHERE_API_KEY"] = getpass.getpass(
+    "Enter your Cohere API key: "
+)
 
-for question in metadata["questions"]:
-
-    for answer in question["answers"]:
-
-        transcript = answer.get("transcript")
-
-        if not transcript:
-            continue
-
-        document = Document(
-            page_content=transcript,
-            metadata={
-                "question_id": question["question_id"],
-                "answer_id": answer["answer_id"],
-                "audio_path": answer["audio_path"],
-                "emotion": answer.get("emotion"),
-            }
-        )
-
-        documents.append(document)
-
-
-print(f"Created {len(documents)} documents.")
-
-documents_by_question = defaultdict(list)
-
-for document in documents:
-
-    question_id = document.metadata["question_id"]
-
-    documents_by_question[question_id].append(document)
-
-os.environ["COHERE_API_KEY"] = getpass.getpass()
 model = ChatCohere(
     model="command-a-plus-05-2026",
     temperature=0.1,
@@ -75,11 +45,11 @@ IMPORTANT PRINCIPLES:
 
 2. Use emotion probabilities only as supporting information.
    Do not treat an emotion probability as evidence of a user's opinion,
-    preference, intention, or evaluation.
-    If the transcripts themselves do not explicitly express an emotion or opinion,
-    do not claim that they do.
-    When relevant, you may mention that the emotional tone varies across answers,
-    but do not infer the cause or meaning of that variation.
+   preference, intention, or evaluation.
+   If the transcripts themselves do not explicitly express an emotion or opinion,
+   do not claim that they do.
+   When relevant, you may mention that the emotional tone varies across answers,
+   but do not infer the cause or meaning of that variation.
 
 3. Do not invent information.
    Do not infer opinions, intentions, causes, preferences, or meanings that are
@@ -116,8 +86,9 @@ IMPORTANT PRINCIPLES:
 12. Generate a small number of meaningful keywords.
     Keywords must be directly supported by the transcripts and represent the
     main recurring topics or themes.
-    Avoid generic keywords such as "پاسخ کاربران", "احساسات", or "نظرات"
-    unless they are genuinely meaningful in the context.
+
+    Avoid generic keywords such as:
+    "پاسخ کاربران", "احساسات", "نظرات"
 
 OUTPUT:
 
@@ -134,6 +105,7 @@ examples = [
         "input": json.dumps(
             {
                 "question_id": "q_example",
+                "question_text": "نظرتان در مورد اتفاقات اطراف چیست؟",
                 "answers": [
                     {
                         "transcript": "بچه‌ها کنار در صحبت می‌کنند.",
@@ -141,8 +113,8 @@ examples = [
                             "neu": 0.70,
                             "hap": 0.20,
                             "ang": 0.05,
-                            "sad": 0.05
-                        }
+                            "sad": 0.05,
+                        },
                     },
                     {
                         "transcript": "سگ‌ها کنار در نشسته‌اند.",
@@ -150,36 +122,44 @@ examples = [
                             "neu": 0.80,
                             "hap": 0.10,
                             "ang": 0.05,
-                            "sad": 0.05
-                        }
-                    }
-                ]
+                            "sad": 0.05,
+                        },
+                    },
+                ],
             },
             ensure_ascii=False,
-            indent=2
+            indent=2,
         ),
         "output": json.dumps(
             {
-                "summary": "پاسخ‌ها عمدتاً دو صحنه را توصیف می‌کنند: بچه‌ها در حال صحبت در کنار در و سگ‌ها در حال نشستن در کنار در. پاسخ‌ها بیشتر توصیفی هستند و نظر یا ارزیابی صریحی ارائه نمی‌کنند.",
+                "summary": (
+                    "پاسخ‌ها عمدتاً دو صحنه را توصیف می‌کنند: "
+                    "بچه‌ها در حال صحبت در کنار در و سگ‌ها در حال نشستن "
+                    "در کنار در. پاسخ‌ها بیشتر توصیفی هستند و نظر یا "
+                    "ارزیابی صریحی ارائه نمی‌کنند."
+                ),
                 "keywords": [
                     "بچه‌ها",
                     "سگ‌ها",
-                    "کنار در"
-                ]
+                    "کنار در",
+                ],
             },
             ensure_ascii=False,
-            indent=2
-        )
+            indent=2,
+        ),
     }
 ]
+
+
 example_prompt = ChatPromptTemplate.from_messages(
     [
         ("human", "{input}"),
         ("ai", "{output}"),
     ]
 )
+
 few_shot_prompt = FewShotChatMessagePromptTemplate(
-    example_prompt=example_prompt, 
+    example_prompt=example_prompt,
     examples=examples,
 )
 
@@ -197,14 +177,18 @@ prompt = ChatPromptTemplate.from_messages(
 Question ID:
 {question_id}
 
+Question:
+{question_text}
+
 Answers:
 {answers}
 
 {format_instructions}
-"""
+""",
         ),
     ]
 )
+
 
 chain = prompt | model | parser
 
@@ -212,43 +196,62 @@ for question in metadata["questions"]:
 
     question_id = question["question_id"]
 
-    if question.get("summary") and question.get("keywords"):
-        print(f"Skipping {question_id}: already processed.")
-        continue
+    question_text = question.get(
+        "question_text",
+        ""
+    ).strip()
 
-    question_documents = documents_by_question.get(
-        question_id,
-        []
-    )
-
-    if not question_documents:
+    if not question_text:
         print(
             f"Skipping {question_id}: "
-            f"no transcripts available."
+            "question_text is missing."
+        )
+        continue
+
+    if question.get("summary") and question.get("keywords"):
+        print(
+            f"Skipping {question_id}: "
+            "already processed."
         )
         continue
 
     answers = []
 
-    for document in question_documents:
+    for answer in question.get("answers", []):
+
+        transcript = answer.get("transcript")
+
+        if not transcript:
+            continue
 
         answers.append(
             {
-                "answer_id": document.metadata["answer_id"],
-                "transcript": document.page_content,
-                "emotion": document.metadata["emotion"],
+                "answer_id": answer.get("answer_id"),
+                "transcript": transcript,
+                "emotion": answer.get("emotion"),
             }
         )
+
+    if not answers:
+        print(
+            f"Skipping {question_id}: "
+            "no transcripts available."
+        )
+        continue
 
     answers_json = json.dumps(
         answers,
         ensure_ascii=False,
-        indent=2
+        indent=2,
     )
 
     print("\n" + "=" * 70)
     print(f"Processing {question_id}")
+    print(f"Question: {question_text}")
     print(f"Number of answers: {len(answers)}")
+
+    summary = None
+    keywords = None
 
     max_retries = 2
 
@@ -259,16 +262,28 @@ for question in metadata["questions"]:
             response = chain.invoke(
                 {
                     "question_id": question_id,
+                    "question_text": question_text,
                     "answers": answers_json,
-                    "format_instructions": parser.get_format_instructions(),
+                    "format_instructions": (
+                        parser.get_format_instructions()
+                    ),
                 }
             )
 
             summary = response.get("summary")
             keywords = response.get("keywords")
 
-            if not isinstance(summary, str) or not isinstance(keywords, list):
-                raise ValueError("Invalid format received from model.")
+            if not isinstance(summary, str):
+                raise ValueError(
+                    "Invalid summary format."
+                )
+
+            if not isinstance(keywords, list):
+                raise ValueError(
+                    "Invalid keywords format."
+                )
+
+            break
 
         except Exception as error:
 
@@ -284,9 +299,6 @@ for question in metadata["questions"]:
                     f"after {max_retries} attempts."
                 )
 
-                summary = None
-                keywords = None
-
 
     if summary is None or keywords is None:
         continue
@@ -297,14 +309,14 @@ for question in metadata["questions"]:
     with open(
         METADATA_FILE,
         "w",
-        encoding="utf-8"
+        encoding="utf-8",
     ) as file:
 
         json.dump(
             metadata,
             file,
             indent=4,
-            ensure_ascii=False
+            ensure_ascii=False,
         )
 
     print("\nSummary:")
@@ -313,4 +325,8 @@ for question in metadata["questions"]:
     print("\nKeywords:")
     print(keywords)
 
-    print(f"\n{question_id} saved successfully.")
+    print(
+        f"\n{question_id} saved successfully."
+    )
+
+print("\nAll questions processed.")
