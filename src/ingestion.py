@@ -4,69 +4,11 @@ import json
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-
-ROOT_DIR = Path(__file__).parent.parent / "data"
-METADATA_FILE = ROOT_DIR / "metadata.json"
+from src.documentize import load_documents
 
 CHROMA_DIR = Path(__file__).parent.parent / "chroma_db"
 
-with open(METADATA_FILE, "r", encoding="utf-8") as file:
-    metadata = json.load(file)
-
-documents = []
-
-for question in metadata["questions"]:
-
-    question_id = question["question_id"]
-
-    question_text = question.get(
-        "question_text",
-        ""
-    ).strip()
-
-    if not question_text:
-        print(
-            f"Skipping {question_id}: "
-            "question_text is missing."
-        )
-        continue
-
-    for answer in question.get("answers", []):
-
-        transcript = answer.get("transcript")
-
-        if not transcript:
-            continue
-
-        document = Document(
-            page_content=f"""
-Question:
-{question_text}
-
-Answer:
-{transcript}
-""".strip(),
-
-            metadata={
-                "question_id": question_id,
-                "question_text": question_text,
-                "answer_id": answer["answer_id"],
-                "audio_path": answer.get("audio_path"),
-                "emotion": json.dumps(
-                    answer.get("emotion"),
-                    ensure_ascii=False,
-                ),
-
-                "summary": question.get("summary", ""),
-                "keywords": json.dumps(
-                    question.get("keywords", []),
-                    ensure_ascii=False,
-                ),
-            },
-        )
-
-        documents.append(document)
-
+documents = load_documents()
 
 print(
     f"Created {len(documents)} documents."
@@ -104,13 +46,16 @@ embeddings = HuggingFaceEmbeddings(
 
 print("\nCreating Chroma vector database...")
 
+ids = [
+    f"{document.metadata['question_id']}_{document.metadata['answer_id']}"
+    for document in documents
+]
+
 vector_db = Chroma.from_documents(
     documents=documents,
-
+    ids=ids,
     embedding=embeddings,
-
     persist_directory=str(CHROMA_DIR),
-
     collection_name="survey_answers",
 )
 

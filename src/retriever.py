@@ -5,6 +5,7 @@ from langchain_classic.retrievers import EnsembleRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from src.documentize import load_documents
 from pathlib import Path
 import json
 import os
@@ -12,53 +13,9 @@ import os
 def reranked_reteriver():
 
     ROOT_DIR = Path(__file__).parent.parent
-
-    METADATA_FILE = ROOT_DIR / "data" / "metadata.json"
     CHROMA_DIR = ROOT_DIR / "chroma_db"
-
-    with open(METADATA_FILE, "r", encoding="utf-8") as file:
-        metadata = json.load(file)
-
-    documents = []
-
-    for question in metadata["questions"]:
-
-        question_id = question["question_id"]
-
-        question_text = question.get(
-            "question_text",
-            ""
-        ).strip()
-
-        for answer in question.get("answers", []):
-
-            transcript = answer.get("transcript")
-
-            if not transcript:
-                continue
-
-            document = Document(
-                page_content=f"""
-    Question:
-    {question_text}
-
-    Answer:
-    {transcript}
-    """.strip(),
-
-                metadata={
-                    "question_id": question_id,
-                    "question_text": question_text,
-                    "answer_id": answer["answer_id"],
-                    "audio_path": answer.get("audio_path"),
-                    "emotion": answer.get("emotion"),
-                    "summary": question.get("summary", ""),
-                    "keywords": question.get("keywords", []),
-                }
-            )
-
-            documents.append(document)
-
+    
+    documents = load_documents()
 
     print(f"Loaded {len(documents)} documents.")
 
@@ -70,7 +27,9 @@ def reranked_reteriver():
         encode_kwargs={
             "normalize_embeddings": True
         }
+
     )
+
     vector_db = Chroma(
         persist_directory=str(CHROMA_DIR),
         embedding_function=embeddings,
@@ -81,7 +40,7 @@ def reranked_reteriver():
         search_type="mmr",
 
         search_kwargs={
-            "k": 10,
+            "k": 20,
             "lambda_mult": 0.5,
         },
     )
@@ -92,7 +51,7 @@ def reranked_reteriver():
         documents
     )
 
-    bm25_retriever.k = 10
+    bm25_retriever.k = 20
 
     ensemble_retriever = EnsembleRetriever(
         retrievers=[
@@ -108,7 +67,7 @@ def reranked_reteriver():
 
     reranker = CohereRerank(
         model="rerank-multilingual-v3.0", 
-        top_n= 3,
+        top_n= 5,
         cohere_api_key=os.environ["COHERE_API_KEY"]
     )
 
