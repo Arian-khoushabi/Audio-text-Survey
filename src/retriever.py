@@ -1,5 +1,5 @@
 from langchain_classic.retrievers import ContextualCompressionRetriever
-from langchain_classic.retrievers.document_compressors import CohereRerank
+from langchain_cohere import CohereRerank
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_huggingface import HuggingFaceEmbeddings
