@@ -4,7 +4,7 @@ from langchain_core.prompts import (
     FewShotChatMessagePromptTemplate,
 )
 from langchain_core.output_parsers import JsonOutputParser
-import getpass
+from dotenv import load_dotenv
 import json
 import os
 from pathlib import Path
@@ -13,12 +13,10 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent / "data"
 METADATA_FILE = ROOT_DIR / "metadata.json"
 
+load_dotenv(Path(__file__).parent.parent / "key.env")
+
 with open(METADATA_FILE, "r", encoding="utf-8") as file:
     metadata = json.load(file)
-
-os.environ["COHERE_API_KEY"] = getpass.getpass(
-    "Enter your Cohere API key: "
-)
 
 model = ChatCohere(
     model="command-a-plus-05-2026",

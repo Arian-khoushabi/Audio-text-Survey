@@ -45,7 +45,10 @@ Answer:
                     "question_text": question_text,
                     "answer_id": answer["answer_id"],
                     "audio_path": answer.get("audio_path"),
-                    "emotion": answer.get("emotion"),
+                    "emotion": json.dumps(
+    answer.get("emotion", {}),
+    ensure_ascii=False
+),
                     "summary": question.get("summary", ""),
                     "keywords": question.get("keywords", []),
                 },

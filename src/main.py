@@ -41,7 +41,7 @@ class LLM_Chat:
             ("human", "{input}"),
         ])
 
-        reteriver = reranked_reteriver()
+        reteriver = reranked_reteriver(self.api_key)
         history_aware_retriever = create_history_aware_retriever(
             self.llm, reteriver, memory_q_prompt
         )

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import whisper
+import torch
 
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -10,7 +11,7 @@ DATA_DIR = PROJECT_DIR / "data"
 
 METADATA_PATH = DATA_DIR / "metadata.json"
 
-MODEL_NAME = "medium"
+MODEL_NAME = "large-v3"
 
 LANGUAGE = "English"
 
@@ -52,8 +53,21 @@ def main():
         f"Loading Whisper model: {MODEL_NAME}"
     )
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print(
+        f"Using device: {device}"
+    )
+
+    if device == "cuda":
+        print(
+            f"GPU: "
+            f"{torch.cuda.get_device_name(0)}"
+        )
+
     model = whisper.load_model(
-        MODEL_NAME
+        MODEL_NAME,
+        device=device
     )
 
     print(
@@ -116,7 +130,7 @@ def main():
                     str(audio_path),
                     language=LANGUAGE,
                     task="transcribe",
-                    fp16=False
+                    fp16=(device == "cuda")
                 )
 
                 answer["transcript"] = (

@@ -4,7 +4,7 @@ import json
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from src.documentize import load_documents
+from documentize import load_documents
 
 CHROMA_DIR = Path(__file__).parent.parent / "chroma_db"
 

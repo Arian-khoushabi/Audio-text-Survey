@@ -10,7 +10,7 @@ from pathlib import Path
 import json
 import os
 
-def reranked_reteriver():
+def reranked_reteriver(api_key):
 
     ROOT_DIR = Path(__file__).parent.parent
     CHROMA_DIR = ROOT_DIR / "chroma_db"
@@ -68,7 +68,7 @@ def reranked_reteriver():
     reranker = CohereRerank(
         model="rerank-multilingual-v3.0", 
         top_n= 5,
-        cohere_api_key=os.environ["COHERE_API_KEY"]
+        cohere_api_key=api_key
     )
 
     reranked_retriever = ContextualCompressionRetriever(

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from transformers import pipeline
+import torch
 
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -56,9 +57,23 @@ def main():
     )
 
 
+    device = 0 if torch.cuda.is_available() else -1
+
+    print(
+        f"Using device: "
+        f"{'cuda' if device == 0 else 'cpu'}"
+    )
+
+    if device == 0:
+        print(
+            f"GPU: "
+            f"{torch.cuda.get_device_name(0)}"
+        )
+
     emotion_model = pipeline(
         "audio-classification",
-        model=MODEL_NAME
+        model=MODEL_NAME,
+        device=device
     )
 
 

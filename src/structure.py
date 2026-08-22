@@ -1,65 +1,120 @@
+
 import json
 from pathlib import Path
 
 
-ROOT_DIR = Path(__file__).parent.parent / "data"
+PROJECT_DIR = Path(__file__).parent.parent
 
-AUDIO_EXTENSIONS = {
-    ".wav",
-    ".mp3",
-    ".flac",
-    ".m4a",
-    ".ogg"
-}
+DATA_DIR = PROJECT_DIR / "data"
+MAQA_DIR = DATA_DIR / "mAQA"
 
-questions = []
+SOURCE_METADATA = DATA_DIR / "original.json"
+OUTPUT_METADATA = DATA_DIR / "metadata.json"
 
-for question_number, question_folder in enumerate(
-    sorted(ROOT_DIR.iterdir()),
-    start=1
-):
-
-    if not question_folder.is_dir():
-        continue
-
-    answers = []
-
-    for answer_number, audio_file in enumerate(
-        sorted(question_folder.iterdir()),
-        start=1
-    ):
-
-        if not audio_file.is_file():
-            continue
-
-        if audio_file.suffix.lower() not in AUDIO_EXTENSIONS:
-            continue
-
-        answers.append({
-            "answer_id": f"q{question_number}_a{answer_number}",
-            "audio_path": str(
-                audio_file.relative_to(ROOT_DIR)
-            ),
-            "transcript": "",
-            "emotion": None,
-            "status": "pending"
-        })
-
-    questions.append({
-        "question_id": f"q{question_number}",
-        "question_text": question_folder.name,
-        "answers": answers,
-        "summary": None
-    })
-
-metadata = {
-    "questions": questions
-}
-
-metadata_file = ROOT_DIR / "metadata.json"
 
 with open(
-    metadata_file,
+    SOURCE_METADATA,
+    "r",
+    encoding="utf-8"
+) as file:
+
+    original_data = json.load(file)
+
+
+questions = {}
+
+
+for item in original_data:
+
+    question_text = item["question"].strip()
+
+    if question_text not in questions:
+
+        questions[question_text] = {
+            "question_id": f"q_{len(questions)}",
+            "question_text": question_text,
+            "summary": "",
+            "keywords": [],
+            "answers": []
+        }
+
+    question = questions[question_text]
+
+
+    for audio_file in item.get(
+        "audio_files",
+        []
+    ):
+
+        audio_path = Path(audio_file)
+
+        filename = audio_path.name
+
+        parts = filename.rsplit(
+            "_",
+            1
+        )
+
+        if (
+            len(parts) == 2
+            and parts[1].endswith(".wav")
+        ):
+
+            number_part = parts[1][:-4]
+
+            if number_part.isdigit():
+
+                corrected_number = (
+                    int(number_part) + 1
+                )
+
+                filename = (
+                    f"{parts[0]}_"
+                    f"{corrected_number}.wav"
+                )
+
+
+        relative_audio_path = (
+            Path("mAQA")
+            / "aud_files"
+            / filename
+        ).as_posix()
+
+
+        answer = {
+
+            "answer_id": (
+                f"{question['question_id']}"
+                f"_a_{len(question['answers'])}"
+            ),
+
+            "audio_path": relative_audio_path,
+
+            "transcript": "",
+
+            "status": "pending",
+
+            "emotion": {},
+
+            "emotion_status": "pending"
+        }
+
+
+        question["answers"].append(
+            answer
+        )
+
+
+metadata = {
+
+    "questions": list(
+        questions.values()
+    )
+}
+
+
+with open(
+    OUTPUT_METADATA,
     "w",
     encoding="utf-8"
 ) as file:
@@ -67,11 +122,40 @@ with open(
     json.dump(
         metadata,
         file,
-        indent=4,
-        ensure_ascii=False
+        ensure_ascii=False,
+        indent=4
     )
 
 
+print("=" * 60)
+
 print(
-    f"Metadata file created successfully:\n{metadata_file}"
+    "mAQA metadata created successfully."
 )
+
+print("=" * 60)
+
+print(
+    f"Questions: "
+    f"{len(metadata['questions'])}"
+)
+
+print(
+    "Total audio files: "
+    f"{sum(len(q['answers']) for q in metadata['questions'])}"
+)
+
+print("=" * 60)
+
+
+for question in metadata["questions"]:
+
+    print(
+        f"{question['question_id']}: "
+        f"{question['question_text']}"
+    )
+
+    print(
+        f"  Answers: "
+        f"{len(question['answers'])}"
+    )
